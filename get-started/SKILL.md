@@ -14,7 +14,7 @@ When this skill is triggered, your first action must be a plain-text reply to th
 The first response should include:
 
 - The issue you think the user wants to start, if provided.
-- The high-level plan: stop containers, check status, update main, install dependencies, migrate, read issue, create task.
+- The high-level plan: stop containers, check status, update main, install dependencies, migrate, read issue, create task, then start a brief grill-me planning question.
 - Any destructive or branch-changing actions, especially checkout/pull.
 - Whether you need clarification.
 
@@ -85,7 +85,27 @@ gh issue view <ISSUE_NUMBER> --repo <OWNER>/<REPO> --json title,body,number,url
 
 Use the `create_task` tool. Use the issue title as the task title and include the issue URL and body in the description. Let Reins generate the branch name unless the user requested a specific one.
 
-### 8. Final response
+### 8. Start a grill-me planning question
+
+After the task is created, start a brief `grill-me` handoff before implementation begins.
+
+Do not launch into implementation. Ask exactly one tough planning question based on the issue context, then stop and wait for the user.
+
+Good examples:
+
+```text
+Before you start building: what assumption in this issue would cause the implementation plan to fail if it turns out to be false?
+```
+
+```text
+Before implementation: what is the smallest version of this change that would satisfy the issue without overbuilding?
+```
+
+```text
+Before coding: what edge case or reviewer concern is most likely to make this approach need rework?
+```
+
+### 9. Final response
 
 Report:
 
@@ -94,6 +114,7 @@ Report:
 - Dependency/migration results.
 - Task created, including branch/session info if available.
 - Issue link.
+- The first `grill-me` question.
 
 ## Stop and ask if
 
