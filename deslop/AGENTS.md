@@ -1,11 +1,13 @@
-# Agent prompts
+# Deslop category prompts
 
-Each agent is launched with `subagent_type: "general-purpose"`. Inject into every prompt:
-- `{scope}` — the resolved, post-exclude file list
-- `{excludes}` — glob patterns to skip if the agent walks the tree itself (node_modules, dist, generated files, lockfiles, snapshots)
-- `{tools}` — detected tools available in the repo
+Use these prompts as criteria for each cleanup category. They can be run sequentially by the current agent. If the harness offers optional parallel helpers, use them only after the user has already seen the initial plan.
 
-All agents share the same output format so consolidation is mechanical.
+For each category, apply:
+- `{scope}` — the resolved, post-exclude file list.
+- `{excludes}` — glob patterns to skip if walking the tree directly, such as node_modules, dist, generated files, lockfiles, and snapshots.
+- `{tools}` — detected tools available in the repo.
+
+All categories share the same output format so consolidation is mechanical.
 
 ## Shared output format
 

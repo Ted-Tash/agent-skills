@@ -1,25 +1,57 @@
 ---
 name: pr
-description: Full PR workflow — run specs, lint, create changelog entry, push, open a PR that closes an issue, update issue status, and request review. Use when the user says /pr or asks to open a pull request.
+description: Full PR workflow: run specs and lint, add changelog entry, push, open a PR that closes an issue, update issue status, and request review. Use when the user says /pr or asks to open a pull request.
 ---
 
 # PR Workflow
 
-End-to-end pull request creation. Runs through every step sequentially, stopping on failures.
+Create a pull request safely and visibly.
+
+## Non-negotiable first response
+
+When this skill is triggered, your first action must be a plain-text reply to the user before running tests, lint, git, `gh`, edits, commits, pushes, or project-board updates.
+
+The first response should include:
+
+- The branch you believe will become the PR.
+- The issue you think the PR closes, if known.
+- The high-level plan: verify branch, run specs/lint, update changelog, commit, push, create PR, update project, request review.
+- The public/destructive actions: committing, pushing, opening a PR, changing issue/project status.
+- Any question that must be answered first.
+
+Keep it short. The purpose is to let the user stop you before public or repo-mutating actions happen.
+
+After the initial plan, proceed only if the issue and branch are clear. Ask before guessing.
 
 ## Prerequisites
 
-- On a task branch (not main/master)
-- Work is committed
-- A GitHub issue exists that this branch addresses
+- On a task/feature branch, not `main` or `master`.
+- Work intended for the PR is committed, except for changelog/lint fixes this workflow may create.
+- A GitHub issue exists and should be closed by the PR.
+- GitHub CLI is authenticated.
 
 ## Steps
 
-### 1. Identify the issue
+### 1. Announce the plan
 
-Look at the task description, branch name, and recent conversation to determine which GitHub issue this PR closes. If ambiguous, ask. Confirm the issue number with the user before proceeding.
+Reply first. Do not run any command before this response.
 
-### 2. Run specs
+### 2. Pre-flight checks
+
+```bash
+git status --short --branch
+git branch --show-current
+```
+
+Stop if:
+
+- Current branch is `main` or `master`.
+- There are unexpected uncommitted changes.
+- The linked issue is unclear.
+
+Confirm the issue number if ambiguous.
+
+### 3. Run specs
 
 ```bash
 dip rspec
@@ -27,108 +59,140 @@ dip rspec
 
 If specs fail, stop and report. Do not continue to linting.
 
-### 3. Run linter
+### 4. Run linter
 
 ```bash
 dip standardrb
 ```
 
-If there are lint violations, run `dip standardrb --fix`, then check if the fixes resolve everything. If auto-fix works, commit the lint fixes separately (`fix: standardrb auto-corrections`). If violations remain that can't be auto-fixed, stop and report.
+If violations appear, try:
 
-### 4. Create changelog entry
-
-Add an entry to `CHANGELOG.md` at the top of the Unreleased section (or the topmost section if no Unreleased heading exists). Format:
-
+```bash
+dip standardrb --fix
 ```
+
+If auto-fix resolves them, commit separately:
+
+```bash
+git add -A
+git commit -m "fix: standardrb auto-corrections"
+```
+
+If violations remain, stop and report.
+
+### 5. Add changelog entry
+
+Read `CHANGELOG.md` first and match its style. Add an entry near the top of the Unreleased/current section:
+
+```markdown
 - Short description of the change ([#ISSUE](issue_url))
 ```
 
-Read the existing changelog first to match its style. Commit the changelog entry: `docs: add changelog entry for #ISSUE`.
+Commit it separately:
 
-### 5. Push
+```bash
+git add CHANGELOG.md
+git commit -m "docs: add changelog entry for #ISSUE"
+```
+
+If there is no changelog or the style is unclear, ask before creating a new pattern.
+
+### 6. Push
 
 ```bash
 git push -u origin HEAD
 ```
 
-### 6. Create the PR
+Stop if push fails.
 
-Before creating the PR, build a thorough description by gathering context:
+### 7. Build PR context
+
+Gather:
 
 ```bash
-# Full diff against base branch
 git diff main...HEAD
-
-# Commit history on this branch
 git log main..HEAD --oneline
-
-# Read the issue for context on what was requested
 gh issue view ISSUE
 ```
 
-Write the PR description by:
-- Reading the **issue** to understand the original ask
-- Reading the **full diff** and **commit history** to understand what was actually done
-- Explaining the **approach** — not just *what* changed but *why* this approach was chosen
-- Calling out anything a reviewer should pay attention to (new dependencies, migration concerns, tricky logic, etc.)
-- Keeping it scannable — use bullet points and short paragraphs, not walls of text
+Use `master` instead of `main` if appropriate.
 
-The PR body must include `Closes #ISSUE` to auto-close the issue on merge.
+### 8. Create the PR
+
+Write a clear PR body with:
+
+- Summary.
+- Approach.
+- Reviewer notes.
+- `Closes #ISSUE`.
+- Test plan.
+
+Example:
 
 ```bash
-gh pr create --title "<concise title under 70 chars>" --body "$(cat <<'EOF'
+gh pr create --title "<concise title>" --body "$(cat <<'EOF'
 ## Summary
-<2-4 bullet points: what changed and why>
+- ...
 
 ## Approach
-<Brief explanation of the implementation approach and any key decisions>
+...
 
 ## Reviewer notes
-<Anything the reviewer should look at closely, or "None">
+None
 
 Closes #ISSUE
 
 ## Test plan
-- [ ] Specs pass
-- [ ] Linter passes
-- [ ] Manual QA (if applicable)
+- [x] Specs pass
+- [x] Linter passes
+- [ ] Manual QA, if applicable
 EOF
 )"
 ```
 
-### 7. Move the issue to "Review In Progress"
+### 9. Update issue project status
 
-Update the issue's project status. First, discover the project and status field:
+Inspect project items:
 
 ```bash
-# Find the project item ID and field info
 gh issue view ISSUE --json projectItems
 ```
 
-Then move it using `gh project item-edit`. If the repo uses GitHub Projects (v2), update the Status field to "Review In Progress" (or the closest match — "In Review", "Review", etc.). If no project board is attached, skip this step and tell the user.
+If a GitHub Projects v2 item is attached, move status to the repo's review state, such as `Review In Progress`, `In Review`, or `Review`.
 
-### 8. Request review
+If no project board is attached or fields are unclear, skip and mention it.
 
-Ask the user:
+### 10. Request review
 
-> Who should review this? (default: willtcarey)
+Ask:
 
-Wait for their response. If they confirm or say nothing specific, use `willtcarey`. Then:
-
-```bash
-gh pr edit <PR_NUMBER> --add-reviewer <reviewer>
+```text
+Who should review this? Default is willtcarey.
 ```
 
-### 9. Done
+Wait for the answer. If the user accepts the default:
 
-Print the PR URL and a summary of everything that was done.
+```bash
+gh pr edit <PR_NUMBER> --add-reviewer willtcarey
+```
 
-## Failure handling
+## Final response
 
-- **Specs fail** → stop at step 2, show failures
-- **Lint fails (can't auto-fix)** → stop at step 3, show violations
-- **Push fails** → stop at step 5, show error (likely needs rebase)
-- **PR creation fails** → stop at step 6, show error
-- **Project board update fails** → warn but continue (non-blocking)
+Report:
 
-Never skip a failing step. The whole point is catching problems before the PR exists.
+- PR URL.
+- Issue closed.
+- Specs/lint result.
+- Changelog commit, if created.
+- Project status update result.
+- Reviewer requested.
+
+## Stop and ask if
+
+- Issue number is ambiguous.
+- Working tree has unexpected changes.
+- Tests or lint fail.
+- Changelog style is unclear.
+- Push fails.
+- PR title/body would require guessing.
+- Reviewer is not confirmed.

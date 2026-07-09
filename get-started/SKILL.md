@@ -1,24 +1,49 @@
 ---
 name: get-started
-description: Full fresh-start workflow — stop all containers, checkout main, pull, bundle, migrate, yarn, then create a task for a GitHub issue. Use when the user says /get-started or pastes an issue and wants to start fresh.
+description: Fresh-start workflow: stop containers, update main, install dependencies, migrate, read a GitHub issue, and create a task. Use when the user says /get-started or wants to start fresh from an issue.
 ---
 
 # Get Started — Fresh Start on an Issue
 
-Stop everything, prep main, and kick off a new task for a GitHub issue.
+Prepare the repo from a clean main branch and create a task for a GitHub issue.
 
-## Trigger
+## Non-negotiable first response
 
-User says "/get-started", "get started", "get-started", or pastes a GitHub issue URL and wants to begin fresh.
+When this skill is triggered, your first action must be a plain-text reply to the user before running any tool, git command, Docker command, GitHub API call, or task creation.
+
+The first response should include:
+
+- The issue you think the user wants to start, if provided.
+- The high-level plan: stop containers, check status, update main, install dependencies, migrate, read issue, create task.
+- Any destructive or branch-changing actions, especially checkout/pull.
+- Whether you need clarification.
+
+Keep it short. The purpose is to let the user stop you before branch changes or environment commands run.
+
+If the issue URL/number and repo context are clear, send the plan and proceed. If uncommitted changes exist or the issue is missing, stop and ask.
 
 ## Prerequisites
 
-- A GitHub issue URL (the user will paste it, or it can be passed as an argument)
-- Docker is running
+- Docker is running.
+- `dip` is available for the project.
+- GitHub CLI is authenticated.
+- A GitHub issue URL or issue number is available before task creation.
 
 ## Steps
 
-### 1. Stop all running containers
+### 1. Announce the plan
+
+Reply first. Do not run Docker, git, `gh`, or dependency commands before this response.
+
+### 2. Check for uncommitted work
+
+```bash
+git status --short --branch
+```
+
+If there are uncommitted changes, stop and ask what to do before switching branches.
+
+### 3. Stop all running containers
 
 ```bash
 docker ps --format '{{.ID}}' \
@@ -27,38 +52,30 @@ docker ps --format '{{.ID}}' \
   | xargs --no-run-if-empty -I % sh -c 'cd %; dip down;'
 ```
 
-If no containers are running, that's fine — move on.
+If no containers are running, continue.
 
-### 2. Checkout main and pull
+### 4. Checkout main and pull
 
 ```bash
 git checkout main
-git pull
+git pull --ff-only
 ```
 
-If there are uncommitted changes on the current branch, warn the user and ask what to do before switching branches.
+If the repo uses `master` instead of `main`, use `master`.
 
-### 3. Bundle install
+### 5. Install dependencies and migrate
+
+Run sequentially and stop on the first failure:
 
 ```bash
 dip bundle
-```
-
-### 4. Run migrations
-
-```bash
 dip rails db:migrate
-```
-
-### 5. Yarn install
-
-```bash
 dip yarn
 ```
 
-### 6. Get the issue
+### 6. Read the issue
 
-If the user hasn't provided a GitHub issue URL yet, ask for one. Once you have it, read the issue to get its title and body:
+If the user did not provide an issue, ask for one.
 
 ```bash
 gh issue view <ISSUE_NUMBER> --repo <OWNER>/<REPO> --json title,body,number,url
@@ -66,25 +83,22 @@ gh issue view <ISSUE_NUMBER> --repo <OWNER>/<REPO> --json title,body,number,url
 
 ### 7. Create the task
 
-Use the `create_task` tool to create a new task from the issue. Use the issue title as the task title, and include the issue URL and body in the description. Let REINS generate the branch name automatically.
+Use the `create_task` tool. Use the issue title as the task title and include the issue URL and body in the description. Let Reins generate the branch name unless the user requested a specific one.
 
-### 8. Done
+### 8. Final response
 
-Print a summary:
-- Containers stopped
-- Main checked out and pulled
-- Dependencies installed
-- Migrations run
-- Task created (with branch name and issue link)
+Report:
 
-The user is now ready to start working in the new task session.
+- Containers stopped.
+- Main checked out and pulled.
+- Dependency/migration results.
+- Task created, including branch/session info if available.
+- Issue link.
 
-## Failure handling
+## Stop and ask if
 
-- **Uncommitted changes** → stop at step 2, ask user (stash? commit? discard?)
-- **Bundle fails** → stop and report
-- **Migration fails** → stop and report
-- **Yarn fails** → stop and report
-- **No issue provided** → ask for one before step 7
-
-Don't silently skip failures. Each step must succeed before moving on.
+- There are uncommitted changes.
+- The issue is missing or ambiguous.
+- `git pull` cannot fast-forward.
+- Any dependency or migration command fails.
+- Task creation would use an unclear title or repo.

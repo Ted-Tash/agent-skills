@@ -1,47 +1,52 @@
 ---
 name: pr-comments
-description: Address PR review comments one at a time. User pastes a PR URL, then we check out the branch, read every review comment, discuss each one, make changes, commit, push, resolve threads, and reply to the reviewer. Use when the user pastes a PR link and wants to work through review feedback.
+description: Address PR review comments one at a time. Use when the user pastes a PR URL and wants to work through review feedback interactively.
 ---
 
 # PR Comments
 
-Work through PR review comments interactively, one at a time.
+Work through unresolved PR review comments interactively, one thread at a time.
 
-## Trigger
+## Non-negotiable first response
 
-User pastes a GitHub PR URL (or says something like "let's address PR comments").
+When this skill is triggered, your first action must be a plain-text reply to the user before running `gh`, git, API calls, checkout, reads, edits, commits, pushes, replies, or thread-resolution mutations.
+
+The first response should include:
+
+- The PR URL/number you think the user wants to handle.
+- The high-level plan: fetch PR metadata, check out branch, read changed files, gather unresolved threads, present one comment at a time.
+- The public/mutating actions that will happen later only after approval: edits, commits, pushes, replies, resolving threads.
+- Any missing information.
+
+Keep it short. The purpose is to let the user stop you before checkout/API activity begins.
+
+After the initial plan, proceed if the PR URL is clear. Stop and ask if it is not.
+
+## Critical interaction rule
+
+Handle exactly one unresolved review thread at a time.
+
+- Never present more than one comment per message.
+- Never make changes for a comment until the user approves the proposed fix for that specific comment.
+- Never resolve or reply to a thread until its fix has been applied, committed, and pushed.
+- Always stop after presenting a comment and wait for the user.
 
 ## Steps
 
-### 1. Parse the PR
+### 1. Announce the plan
 
-Extract the owner, repo, and PR number from the URL. Then gather context — run these in parallel:
+Reply first. Do not run `gh`, git, or API calls before this response.
+
+### 2. Parse and fetch PR context
+
+Extract owner, repo, and PR number from the URL. Then gather:
 
 ```bash
-# Get PR metadata: branch, files, title
 gh pr view <PR_NUMBER> --repo <OWNER>/<REPO> --json headRefName,baseRefName,title,url,files,reviews
-
-# Get all review comments (threaded discussion on specific lines)
 gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/comments --paginate
 ```
 
-### 2. Check out the branch
-
-```bash
-git fetch origin
-git checkout <headRefName>
-git pull origin <headRefName>
-```
-
-### 3. Read changed files
-
-Read every file that was changed in the PR so you have full context for addressing comments. Use the `files` list from step 1.
-
-### 4. Build the comment list
-
-From the review comments fetched in step 1, build a list of **unresolved comment threads**. Group replies together — each thread is identified by the top-level comment (comments where `in_reply_to_id` is null are thread starters; those with `in_reply_to_id` are replies).
-
-Skip threads that are already resolved. To check resolution status, use the GraphQL API:
+Also fetch review thread resolution status with GraphQL:
 
 ```bash
 gh api graphql -f query='
@@ -72,84 +77,93 @@ gh api graphql -f query='
 ' -F owner="<OWNER>" -F repo="<REPO>" -F pr="<PR_NUMBER>"
 ```
 
-This gives you thread IDs (needed for resolving later) and resolution status in one call. Prefer this over the REST endpoint for building the comment list.
+### 3. Check out the PR branch
 
-### 5. Walk through comments ONE AT A TIME
+Before switching branches, check for local changes:
 
-**THIS IS THE MOST IMPORTANT STEP. Do not rush it.**
+```bash
+git status --short --branch
+```
 
-Present exactly ONE unresolved thread, then STOP and WAIT for the user to respond. Do not present the next comment. Do not make changes yet. Do not continue in any way until the user has explicitly told you what they want to do.
+If dirty, stop and ask.
 
-For each unresolved thread, present it like this:
+Then:
+
+```bash
+git fetch origin
+git checkout <headRefName>
+git pull origin <headRefName>
+```
+
+### 4. Read changed files
+
+Read every file changed in the PR so comments are evaluated with context.
+
+### 5. Build unresolved thread list
+
+Group comments by thread. Skip resolved threads. For each unresolved thread, retain:
+
+- Thread node ID.
+- Top-level REST comment database ID.
+- Reviewer login.
+- File and line.
+- Diff hunk.
+- Full comment/reply history.
+
+### 6. Present one thread and stop
+
+For each unresolved thread, present exactly one in this shape:
 
 ---
 
-**Comment _N_ of _total_** — `path/to/file.rb` line _L_
+**Comment N of TOTAL** — `path/to/file` line L
 
-> _@reviewer said:_
-> _the comment body_
+> @reviewer said:
+> comment body
 
-_(show the relevant diff hunk for context)_
+Include the relevant diff hunk if it helps the user understand the comment.
 
-**My read:** _your analysis of what the reviewer is asking for_
+**My read:** what the reviewer is asking for.
 
-**Proposed fix:** _what you'd do to address it_
+**Proposed fix:** concrete change you recommend.
 
 ---
 
-Then **STOP. Do not write another word. Wait for the user.**
+Then stop. Do not continue until the user responds.
 
-The user might:
-- **Agree** → proceed with the proposed fix
-- **Disagree / want something different** → adjust the plan
-- **Want to skip** → mark it to skip (don't resolve, don't reply)
-- **Want to discuss** → go back and forth until they're happy
+### 7. Apply approved fix
 
-Only after the user has given clear approval (or said skip) do you act on that comment and then present the next one. Every single comment gets its own back-and-forth. No exceptions.
+Only after user approval for the current thread:
 
-### 6. Make the changes (per comment)
+1. Make the change.
+2. Show what changed.
+3. Move to the next unresolved thread and stop again.
 
-After the user approves a plan for the CURRENT comment, make the code changes immediately. Show the user what you changed. Then present the NEXT comment and STOP again. Repeat the cycle:
+If the user skips a thread, mark it as skipped locally and do not edit, reply, or resolve it.
 
-1. Present comment → STOP
-2. User gives input → discuss until agreed
-3. Make the change → show result
-4. Present next comment → STOP
+### 8. Commit and push after all threads are handled
 
-This loop continues until every comment has been addressed or skipped. Never batch multiple comments together. Never present two comments in one message.
-
-### 7. Commit and push
-
-Once ALL comments have been walked through and addressed (or skipped):
+When all comments have been addressed or skipped:
 
 ```bash
 git add -A
-git commit -m "$(cat <<'EOF'
-address pr review feedback
-
-<concise summary of what was changed and why>
-EOF
-)"
+git commit -m "address pr review feedback"
 git push origin HEAD
 ```
 
-If the changes are logically distinct, consider multiple commits grouped by concern. Use your judgment.
+Use multiple commits if changes are logically separate.
 
-### 8. Resolve threads and reply
+### 9. Reply and resolve addressed threads
 
-For each comment that was addressed (not skipped), do two things:
-
-**a) Reply to the comment**, tagging the original reviewer:
+For each addressed thread, reply concisely:
 
 ```bash
 gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/comments \
-  -f body="@<reviewer> <explanation of what was done to address this>" \
+  -f body="@<reviewer> <what changed>" \
   -F in_reply_to=<top_level_comment_id>
 ```
 
-Keep replies concise but informative. The reviewer should understand what changed without having to re-read the diff.
-
-**b) Resolve the thread** using GraphQL:
+Then resolve with GraphQL:
 
 ```bash
 gh api graphql -f query='
@@ -161,28 +175,24 @@ gh api graphql -f query='
 ' -f threadId="<THREAD_NODE_ID>"
 ```
 
-### 9. Summary
+Do not resolve skipped threads.
 
-Print a wrap-up:
+## Final response
 
-- How many comments were addressed
-- How many were skipped
-- What was committed
-- Link to the PR
+Report:
 
-## Critical rule: ONE AT A TIME
+- Addressed thread count.
+- Skipped thread count.
+- Commit hash(es).
+- Push result.
+- Resolved/replied threads.
+- PR URL.
 
-This cannot be overstated. The user wants to be in the loop on every single comment. The workflow is a conversation, not a batch job.
+## Stop and ask if
 
-- **NEVER present more than one comment per message.**
-- **NEVER make changes without the user's go-ahead on that specific comment.**
-- **NEVER skip ahead, summarize remaining comments, or ask "should I just handle the rest?"**
-- **ALWAYS stop after presenting a comment and wait for the user's response.**
-- If there are 20 comments, there will be at least 20 back-and-forth exchanges. That's the point.
-
-## Other important notes
-
-- **Be opinionated.** Don't just parrot the comment back — give your read on what the reviewer wants and propose a concrete fix. The user is relying on you to do the thinking.
-- **Read the code first.** Before proposing a fix, make sure you've read the relevant file(s) so your suggestion actually works.
-- **Respect skips.** If the user wants to skip a comment, don't resolve it or reply to it. They'll handle it themselves.
-- **Group commits sensibly.** One big commit is fine for small PRs. For larger ones, group by file or concern.
+- PR URL is missing or ambiguous.
+- Working tree is dirty before checkout.
+- A comment's intent is unclear.
+- A proposed fix touches unrelated code.
+- Commit or push fails.
+- Thread resolution API fails.

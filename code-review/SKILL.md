@@ -1,57 +1,118 @@
 ---
 name: code-review
-description: Review the current branch's code changes for bugs and correctness issues using GPT 5.4 with extra-high reasoning. Use when the user asks to review code, review a branch, or run a code review after verifying things work in the browser.
-disable-model-invocation: true
+description: Review the current branch's code changes for bugs and correctness issues. Use when the user asks to review code, review a branch, or run a code review after verifying things work.
 ---
+
 # Code Review
-Performs a thorough code review of the current branch's diff against the base branch, using OpenAI GPT 5.4 with extra-high reasoning for maximum analysis depth.
-**IMPORTANT:** This review MUST run in a sub-agent because the current session uses a different provider (Anthropic) and cannot switch to OpenAI mid-session. You must use the `delegate` tool immediately — do NOT attempt to switch the current session's model.
-> Note: The `delegate` tool is only available in task sessions. If this is a scratch/assistant session, tell the user you need to run this from a task session.
+
+Review the current branch's diff against its base branch and report discrete, actionable correctness issues.
+
+## Non-negotiable first response
+
+When this skill is triggered, your first action must be a plain-text reply to the user before running any tool, git command, API call, or analysis command.
+
+The first response should include:
+
+- What branch or change you intend to review.
+- The base branch you expect to compare against, if known.
+- The high-level review plan: inspect status, gather diff, review changed files, report findings.
+- Any assumptions or questions.
+
+Keep it short. The purpose is to let the user stop you before you inspect or run commands.
+
+If the review target is clear, send the plan and then proceed. If the branch/base is ambiguous, stop and ask.
+
+## Review scope
+
+Focus on bugs introduced by the change:
+
+- Correctness regressions.
+- Broken edge cases.
+- Security or privacy issues.
+- Data loss or migration risks.
+- Performance issues that are clear from the diff.
+- Maintainability issues only when they are concrete and likely to cause bugs.
+
+Do not flag trivial style, subjective preferences, or pre-existing issues unless the diff makes them worse.
 
 ## Steps
-### 1. Gather the diff FIRST (before delegating)
-Gather the diff in the current session so it can be passed to the sub-agent in the prompt. This avoids the sub-agent needing to figure out the base branch.
+
+### 1. Announce the plan
+
+Reply first. Do not run `git`, `gh`, `rg`, or any other tool before this response.
+
+### 2. Pre-flight
+
+Check:
+
 ```bash
-# Determine the base branch
-git merge-base HEAD origin/<base_branch>
-# Get the full diff
-git diff $(git merge-base HEAD origin/<base_branch>)..HEAD
+git status --short --branch
+git branch -r | grep -E 'origin/(main|master|staging)$'
 ```
 
-If the diff is very large, also get a summary:
+Determine the base branch:
+
+- Use the branch the user specified, if any.
+- Otherwise prefer `origin/main`.
+- Fall back to `origin/master` if main does not exist.
+- Use `origin/staging` only when the user asks for it or the repo clearly uses staging as the PR base.
+
+### 3. Gather the diff
+
 ```bash
-git diff --stat $(git merge-base HEAD origin/<base_branch>)..HEAD
+git merge-base HEAD origin/<base-branch>
+git diff --stat $(git merge-base HEAD origin/<base-branch>)..HEAD
+git diff $(git merge-base HEAD origin/<base-branch>)..HEAD
 ```
 
-### 2. Delegate to a sub-agent with GPT 5.4 xhigh
-Use the `delegate` tool to spawn a sub-session. Set the model to `openai-codex/gpt-5.4` with `xhigh` thinking level. Pass the **entire review prompt below** with the diff inserted as the delegation prompt.
-The delegate call should look like:
-```
-delegate(
-  prompt: "<the full review prompt below with diff inserted>",
-  model: "gpt-5.4",
-  provider: "openai-codex",
-  thinkingLevel: "xhigh"
-)
-```
-### 3. Build the delegation prompt
-The review prompt lives in `review-prompt.md` in this skill's directory. Read it verbatim:
-```
-<skill_dir>/review-prompt.md
-```
-Construct the delegation prompt by concatenating:
-1. The **entire contents** of `review-prompt.md` exactly as-is (do NOT paraphrase, summarize, or modify it)
-2. Then append the diff:
-```
-Here is the diff to review:
-\`\`\`diff
-<INSERT THE DIFF HERE>
-\`\`\`
-```
+If the diff is large, first review the stat and changed file list, then inspect files in logical groups.
+
+### 4. Read relevant files
+
+Read changed files and nearby unchanged context before making claims. Use repository search to verify affected callsites when needed.
+
+### 5. Produce findings
+
+Use the review guidance in this skill's `review-prompt.md` as the standard for what counts as a finding.
+
+Return human-readable markdown:
+
+```markdown
+## Code Review Results
+
+### Overall Verdict: Correct|Incorrect
+
+> Short explanation.
+
+**Confidence:** NN%
+
 ---
-### 4. Present the results
-The sub-agent's response will come back formatted as human-readable markdown. Present it directly to the user — no additional transformation needed.
-## Notes
-- This skill is designed to be run once development is complete and browser testing has confirmed functionality.
-- The delegation only works in **task sessions** (not scratch/assistant sessions) since the `delegate` tool is task-only.
-- If the diff is extremely large (>10,000 lines), consider reviewing in chunks by directory or feature area — delegate multiple sub-agents, one per area.
+
+### Findings
+
+#### [P<n>] Title
+
+**File:** `path/to/file` (lines X-Y)
+**Confidence:** NN%
+
+One paragraph explaining the bug, when it happens, and why it matters.
+```
+
+If there are no findings, say:
+
+```markdown
+> No issues found. The patch looks correct.
+```
+
+## Stop and ask if
+
+- The working tree has uncommitted changes that make the review target ambiguous.
+- The base branch cannot be determined.
+- The diff is too large to review responsibly in one pass.
+- The user asks for a style/design review instead of a correctness review.
+
+## Important notes
+
+- Do not edit files during a code review unless the user explicitly asks for fixes.
+- Do not commit, push, or open PRs from this skill.
+- Do not assume hidden parallel review helpers. If the harness provides optional helpers, only use them after the initial plan response and only when they are clearly available.

@@ -5,29 +5,57 @@ description: Take screenshots of the running dev app using Playwright. Use when 
 
 # Agent Browser
 
-Automate a headless Chromium browser to take screenshots of the local dev app.
+Automate a headless Chromium browser to capture screenshots of a local dev app.
+
+## Non-negotiable first response
+
+When this skill is triggered, your first action must be a plain-text reply to the user before running any tool, command, browser action, or script.
+
+The first response should include:
+
+- The pages or UI states you think need screenshots.
+- The high-level browser plan: login, navigate, interact, capture.
+- Any assumptions about local URL, credentials, or app state.
+- Whether you need clarification before proceeding.
+
+Keep it short. The purpose is to let the user stop you before browser automation starts.
+
+If the requested screenshot flow is clear and low risk, send the plan and then proceed. If credentials, target pages, or expected state are unclear, stop and ask.
 
 ## When to use
 
-- Capturing screenshots for pull request descriptions
-- Visually verifying UI changes
-- Documenting before/after states of a feature
+- Capturing screenshots for pull request descriptions.
+- Visually verifying UI changes.
+- Documenting before/after states of a feature.
 
 ## Prerequisites
 
-- Dev stack must be running
-- Playwright installed (`npx playwright` available, with chromium: `npx playwright install chromium`)
-- Node.js available
+- Dev stack is running.
+- Node.js is available.
+- Playwright dependencies are installed for this skill.
+- The target app URL and login credentials are known, or the page does not require auth.
 
-## Taking screenshots
+## Screenshot workflow
 
-Run the screenshot script with a JSON config:
+1. Announce the screenshot plan first.
+2. Confirm or infer:
+   - `baseUrl` (usually `http://localhost:3000`).
+   - Login route and credentials, if needed.
+   - Pages to capture.
+   - Interactions needed before capture.
+3. Run the screenshot script with a JSON config:
 
 ```bash
 node ~/.agents/skills/agent-browser/scripts/screenshot.js '<json_config>'
 ```
 
-### Config format
+If this repo copy is being used directly instead of the installed skill path, run:
+
+```bash
+node agent-browser/scripts/screenshot.js '<json_config>'
+```
+
+## Config format
 
 ```json
 {
@@ -56,37 +84,18 @@ node ~/.agents/skills/agent-browser/scripts/screenshot.js '<json_config>'
 }
 ```
 
-### Config fields
+## Available actions
 
-| Field | Required | Description |
-|---|---|---|
-| `baseUrl` | yes | Base URL of the dev server |
-| `login` | no | Login config (omit to skip auth) |
-| `login.url` | no | Login page path (default: `/users/sign_in`) |
-| `login.emailField` | no | Email input name attribute (default: `user[email]`) |
-| `login.passwordField` | no | Password input name attribute (default: `user[password]`) |
-| `login.email` | yes (if login) | Login email |
-| `login.password` | yes (if login) | Login password |
-| `screenshots` | yes | Array of pages to screenshot |
-| `screenshots[].name` | yes | Filename (without extension) |
-| `screenshots[].path` | yes | URL path to navigate to |
-| `screenshots[].waitFor` | no | CSS selector to wait for before screenshotting |
-| `screenshots[].actions` | no | Array of actions to perform before screenshotting |
-| `screenshots[].fullPage` | no | Capture full page (default: true) |
-| `outputDir` | no | Directory for screenshots (default: `tmp/screenshots`) |
+- `{ "click": "selector" }` — click an element.
+- `{ "fill": ["selector", "value"] }` — fill an input.
+- `{ "wait": milliseconds }` — wait a fixed duration.
+- `{ "select": ["selector", "value"] }` — select an option.
+- `{ "hover": "selector" }` — hover over an element.
+- `{ "screenshot": "name" }` — take an intermediate screenshot.
+- `{ "waitForSelector": "selector" }` — wait for an element.
+- `{ "type": ["selector", "value"] }` — type with keystrokes.
 
-### Available actions
-
-- `{ "click": "selector" }` — click an element
-- `{ "fill": ["selector", "value"] }` — type into an input
-- `{ "wait": milliseconds }` — wait a fixed duration
-- `{ "select": ["selector", "value"] }` — select an option
-- `{ "hover": "selector" }` — hover over an element
-- `{ "screenshot": "name" }` — take an intermediate screenshot
-- `{ "waitForSelector": "selector" }` — wait for an element to appear
-- `{ "type": ["selector", "value"] }` — type with keystrokes (useful for searchable inputs)
-
-### Example
+## Example
 
 ```bash
 node ~/.agents/skills/agent-browser/scripts/screenshot.js '{
@@ -99,12 +108,19 @@ node ~/.agents/skills/agent-browser/scripts/screenshot.js '{
 }'
 ```
 
-Screenshots are saved to `tmp/screenshots/` as PNG files.
+Screenshots are saved to `tmp/screenshots/` by default.
 
-## Notes
+## Stop and ask if
 
-- The script runs headless Chromium — no display needed
-- Viewport is 1280x800 by default
-- Login is performed once, cookies persist for all screenshots in the run
-- Use `waitFor` to ensure dynamic content has loaded before capturing
-- The login config is generic — adjust field names for non-Devise apps
+- Login credentials are missing.
+- The target page or desired state is ambiguous.
+- The app is not running.
+- The requested automation would submit, delete, publish, email, charge, or otherwise mutate real data unexpectedly.
+
+## Final response
+
+Report:
+
+- Screenshot files created.
+- Any failures and why.
+- Any assumptions made.
