@@ -28,7 +28,8 @@ Handle exactly one unresolved review thread at a time.
 
 - Never present more than one comment per message.
 - Never make changes for a comment until the user approves the proposed fix for that specific comment.
-- Never resolve or reply to a thread until its fix has been applied, committed, and pushed.
+- Never resolve or reply to a thread until its fix has been applied, committed, pushed, and the user has explicitly approved the exact GitHub reply/resolution action.
+- You may draft a reply for the user to review, but do not post it to GitHub unless the user explicitly says to send/post that reply.
 - Always stop after presenting a comment and wait for the user.
 
 ## Steps
@@ -153,17 +154,44 @@ git push origin HEAD
 
 Use multiple commits if changes are logically separate.
 
-### 9. Reply and resolve addressed threads
+### 9. Draft replies, then wait for explicit approval
 
-For each addressed thread, reply concisely:
+For each addressed thread, draft a concise reply for the user to review. Do not post it yet.
+
+Present drafts like this:
+
+```text
+Thread: <file>:<line> by @<reviewer>
+Draft reply:
+@<reviewer> <what changed>
+Resolve thread after posting? yes/no recommendation
+```
+
+Then stop and ask the user to approve, edit, or skip each draft. The user must explicitly approve before any GitHub reply is posted or any thread is resolved.
+
+Acceptable approval examples:
+
+- "Post this reply."
+- "Send it and resolve the thread."
+- "Use that wording for comment 2."
+
+Not enough for approval:
+
+- "Looks good" when it is unclear whether they mean the code or the GitHub reply.
+- Silence/no response.
+- Approval of the code fix only.
+
+### 10. Post approved replies and resolve only approved threads
+
+Only after explicit approval, post the approved reply:
 
 ```bash
 gh api repos/<OWNER>/<REPO>/pulls/<PR_NUMBER>/comments \
-  -f body="@<reviewer> <what changed>" \
+  -f body="@<reviewer> <approved reply text>" \
   -F in_reply_to=<top_level_comment_id>
 ```
 
-Then resolve with GraphQL:
+Resolve the thread only if the user explicitly approved resolving it:
 
 ```bash
 gh api graphql -f query='
@@ -175,7 +203,7 @@ gh api graphql -f query='
 ' -f threadId="<THREAD_NODE_ID>"
 ```
 
-Do not resolve skipped threads.
+Do not reply to or resolve skipped threads. Do not reply to or resolve addressed threads that are still awaiting reply/resolution approval.
 
 ## Final response
 
@@ -185,7 +213,9 @@ Report:
 - Skipped thread count.
 - Commit hash(es).
 - Push result.
-- Resolved/replied threads.
+- Drafted reply count.
+- Posted reply count.
+- Resolved thread count.
 - PR URL.
 
 ## Stop and ask if
@@ -195,4 +225,6 @@ Report:
 - A comment's intent is unclear.
 - A proposed fix touches unrelated code.
 - Commit or push fails.
+- User has not explicitly approved the exact GitHub reply.
+- User has not explicitly approved resolving the thread.
 - Thread resolution API fails.
