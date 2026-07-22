@@ -20,7 +20,9 @@ The first response should include:
 
 Keep it short. The purpose is to let the user stop you before checkout/API activity begins.
 
-After the initial plan, proceed if the PR URL is clear. Stop and ask if it is not.
+After the initial plan, proceed immediately if the PR URL is clear. Do not stop after merely saying you will fetch the first comment. The first required stopping point is after you have fetched context and presented the first unresolved review thread to the user.
+
+Stop after the initial plan only if the PR URL or requested PR is missing or ambiguous.
 
 ## Critical interaction rule
 
@@ -37,6 +39,8 @@ Handle exactly one unresolved review thread at a time.
 ### 1. Announce the plan
 
 Reply first. Do not run `gh`, git, or API calls before this response.
+
+This announcement is not a permission checkpoint when the PR URL is clear. After sending it, continue through context gathering and branch checkout until you can present the first unresolved thread. Then stop and wait.
 
 ### 2. Parse and fetch PR context
 
@@ -130,7 +134,7 @@ Include the relevant diff hunk if it helps the user understand the comment.
 
 ---
 
-Then stop. Do not continue until the user responds.
+This is the first normal permission checkpoint in the workflow. Stop here and do not continue until the user responds.
 
 ### 7. Apply approved fix
 
@@ -220,7 +224,7 @@ Report:
 
 ## Stop and ask if
 
-- PR URL is missing or ambiguous.
+- PR URL is missing or ambiguous. Do not stop after the initial safety announcement if the PR URL is clear; continue until the first unresolved thread is presented.
 - Working tree is dirty before checkout.
 - A comment's intent is unclear.
 - A proposed fix touches unrelated code.

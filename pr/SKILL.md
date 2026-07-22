@@ -82,20 +82,39 @@ If violations remain, stop and report.
 
 ### 5. Add changelog entry
 
-Read `CHANGELOG.md` first and match its style. Add an entry near the top of the Unreleased/current section:
+Read `CHANGELOG.md` first and match its style. Add an entry near the top of the Unreleased/current section.
+
+The changelog entry must be customer-facing:
+
+- Write in plain, simple language.
+- Describe the user-visible fix or improvement.
+- Avoid technical implementation details.
+- Do not mention GitHub.
+- Do not include issue numbers, PR numbers, links, branch names, commit hashes, or internal ticket references.
+- Do not write from the developer's perspective; write for a customer reading release notes.
+
+Good examples:
 
 ```markdown
-- Short description of the change ([#ISSUE](issue_url))
+- Fixed an issue where contact verification links could fail unexpectedly.
+- Improved design vision downloads so valid links open more reliably.
+```
+
+Bad examples:
+
+```markdown
+- Refactored DesignChat scopes into class methods ([#123](https://github.com/example/repo/issues/123))
+- Fixed GH-123 by updating the ActiveRecord query in the controller.
 ```
 
 Commit it separately:
 
 ```bash
 git add CHANGELOG.md
-git commit -m "docs: add changelog entry for #ISSUE"
+git commit -m "docs: update changelog"
 ```
 
-If there is no changelog or the style is unclear, ask before creating a new pattern.
+If there is no changelog, the correct section is unclear, or you cannot describe the change in customer-facing terms, ask before editing.
 
 ### 6. Push
 
